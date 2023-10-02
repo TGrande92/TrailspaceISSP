@@ -1,3 +1,6 @@
+#Andrew Hull
+#Monday, Oct 2
+#Discrete state ex.
 import gym
 from gym import spaces
 import numpy as np
