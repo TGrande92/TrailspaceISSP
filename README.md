@@ -8,3 +8,4 @@ https://youtu.be/J1hv0MJghag?si=5fYmm0MrO8YbGd-T
 https://github.com/AlexandreSajus/Quadcopter-AI
 https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 run simple_visualization.py to view plotting of ML. Make sure to install dependencies first
+https://arxiv.org/pdf/2008.03162.pdf

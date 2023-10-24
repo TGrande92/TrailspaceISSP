@@ -1,0 +1,23 @@
+**Algorithm 1** Deep Q-Network Based UAV-BS Movement Strategy
+
+**Required:** Initial Position of UAV-BSs, \( m_i(0) \) and UEs \( n_j(0) \)
+
+1. Initialize replay memory \( D \) with capacity \( N \), mini-batch size \( B \), initialize action-value network \( Q \) with weight \( \theta_j \in Q \), target network \( Q \) with weight \( \hat{\theta}_j \in Q \) with random weights.
+2. for each episode do
+3.   Reset UAV-BSs to the initial positions
+4.   for each time step \( t \) do
+5.     for each UAV-BS agent \( j \) do
+6.       Observe \( s^j_t \)
+7.       Choose the action \( a^j_t \) which maximizes the \( Q(s^j_t, a^j_t; \theta_j) \)
+8.     end for
+9.     All agents take actions, observe rewards \( r^j_t \), update state \( s^j_t \rightarrow s^j_{t+1} \)
+10.    for each UAV-BS agent \( j \) do
+11.      Observe \( s^j_{t+1} \)
+12.      Store \( (s^j_t, a^j_t, r^j_t, s^j_{t+1}) \) into replay memory \( D_j \)
+13.      Uniformly sample mini batch from replay memory \( D_j \)
+14.      Perform a gradient descent on \( \text{Loss} = (r^j_t + \gamma \max_{a'} Q(s^j_{t+1}, a'; \hat{\theta}_j) - Q(s^j_t, a^j_t; \theta_j))^2 \) with respect to network parameters \( \theta_j \).
+15.      Update \( \theta_j = \hat{\theta}_j \) every \( C \) time steps
+16.    end for
+17.  end for
+18. end for
+
