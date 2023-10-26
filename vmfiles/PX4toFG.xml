@@ -1,0 +1,28 @@
+<?xml version="1.0" ?>
+<PropertyList>
+  <generic>
+    <input>
+      <binary_mode>true</binary_mode>
+      <chunk>
+        <name>5</name>
+        <type>double</type>
+        <node>/controls/flight/aileron</node>
+      </chunk>
+      <chunk>
+        <name>7</name>
+        <type>double</type>
+        <node>/controls/flight/elevator</node>
+      </chunk>
+      <chunk>
+        <name>2</name>
+        <type>double</type>
+        <node>/controls/flight/rudder</node>
+      </chunk>
+      <chunk>
+        <name>4</name>
+        <type>double</type>
+        <node>/controls/engines/engine/throttle</node>
+      </chunk>
+    </input>
+  </generic>
+</PropertyList>
