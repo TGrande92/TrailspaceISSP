@@ -186,14 +186,17 @@ def optimize_model():
     else:
         num_episodes = 50
 
+    episode_rewards = []
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
         state, info = env.reset()
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         for t in count():
+        episode_reward = 0
             action = select_action(state)
             observation, reward, terminated, truncated, _ = env.step(action.item())
             reward = torch.tensor([reward], device=device)
+            episode_reward += reward.item()
             done = terminated or truncated
 
             if terminated:
@@ -202,6 +205,10 @@ def optimize_model():
                 next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
             # Store the transition in memory
+            
+            if done:
+                episode_rewards.append(episode_reward)
+
             memory.push(state, action, next_state, reward)
 
             # Move to the next state
