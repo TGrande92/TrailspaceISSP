@@ -1,4 +1,4 @@
-import gymnasium as gym
+import gym
 import math
 import random
 import matplotlib
@@ -23,6 +23,27 @@ plt.ion()
 # if GPU is to be used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
+
+episode_rewards = []
+
+def plot_rewards():
+    print('Attempting to plot rewards...')
+    plt.figure(figsize=(10, 5))
+    plt.title('Episode Rewards Over Time')
+    plt.xlabel('Episode')
+    plt.ylabel('Reward')
+    print(f'Episode Rewards: {episode_rewards}')
+    plt.plot(episode_rewards)
+    if len(episode_rewards) > 10:
+        # Plotting the moving average of the past 10 episodes
+        moving_avg = [sum(episode_rewards[i-10:i])/10 for i in range(10, len(episode_rewards))]
+        plt.plot(range(10, len(episode_rewards)), moving_avg, label='Moving Avg (last 10 episodes)', color='red')
+        plt.legend()
+    plt.pause(0.001)  # pause for plots to update
+    if is_ipython:
+        display.display(plt.gcf())
+        display.clear_output(wait=True)
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -188,11 +209,15 @@ def optimize_model():
 
     episode_rewards = []
     for i_episode in range(num_episodes):
+    # Plotting the rewards every 50 episodes
+        if i_episode % 50 == 0:
+            plot_rewards()
+
         # Initialize the environment and get it's state
         state, info = env.reset()
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         for t in count():
-        episode_reward = 0
+            episode_reward = 0
             action = select_action(state)
             observation, reward, terminated, truncated, _ = env.step(action.item())
             reward = torch.tensor([reward], device=device)
@@ -236,3 +261,6 @@ def optimize_model():
     plt.show()
 
 
+
+plt.show()
+input('Press enter to exit...')
