@@ -4,28 +4,11 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import random
-from collections import namedtuple, deque
-from itertools import count
-import matplotlib.pyplot as plt
 import math
+import pickle
+from collections import namedtuple, deque
 
-Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
-
-class ReplayMemory(object):
-
-    def __init__(self, capacity):
-        self.memory = deque([], maxlen=capacity)
-
-    def push(self, *args):
-        """Save a transition"""
-        self.memory.append(Transition(*args))
-
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
-
-    def __len__(self):
-        return len(self.memory)
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 # DQN Network
 class DQN(nn.Module):
@@ -40,6 +23,27 @@ class DQN(nn.Module):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
         return self.layer3(x)
+
+class ReplayMemory:
+    def __init__(self, capacity):
+        self.memory = deque(maxlen=capacity)
+
+    def push(self, *args):
+        self.memory.append(Transition(*args))
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+
+def save_replay_memory(memory, file_name):
+    with open(file_name, 'wb') as file:
+        pickle.dump(memory, file)
+
+def load_replay_memory(file_name):
+    with open(file_name, 'rb') as file:
+        return pickle.load(file)
 
 # Global Variables
 BATCH_SIZE = 128
@@ -80,6 +84,12 @@ def select_action(state):
             return policy_net(state).max(1)[1].view(1, 1)
     else:
         return torch.tensor([[random.randrange(n_actions)]], dtype=torch.long)
+
+def get_reward(altitude, xaccel, yaccel, zaccel):
+    if altitude > 0:
+        return 1
+    else:
+        return -100
 
 # Optimize Model Function
 def optimize_model():
@@ -122,19 +132,49 @@ def save_commands_to_csv(commands, file_path):
         writer.writerow(["elapsedTime", "elevator", "aileron", "rudder"])
         writer.writerows(commands)
 
-def main():
-    # change this to change the dummy data
-    data = load_simulator_data("dummydata/data1.csv")
+def run_episode(data):
+    """Run one episode and return the total reward."""
+    total_reward = 0
     stored_commands = []
 
-    for row in data:
+    for idx, row in enumerate(data):
         elapsedTime, altitude, xaccel, yaccel, zaccel = row
         state = torch.tensor([float(altitude), float(xaccel), float(yaccel), float(zaccel)], dtype=torch.float32).unsqueeze(0)
         action = select_action(state)
+        reward = get_reward(float(altitude), float(xaccel), float(yaccel), float(zaccel))
+        total_reward += reward
         elevator, aileron, rudder = action_space[int(action.item())]
         stored_commands.append([elapsedTime, elevator, aileron, rudder])
 
+        # Store this transition into the replay memory
+        if idx + 1 < len(data):
+            next_state = torch.tensor([float(data[idx+1][1]), float(data[idx+1][2]), float(data[idx+1][3]), float(data[idx+1][4])], dtype=torch.float32).unsqueeze(0)
+        else:
+            next_state = None
+        memory.push(state, action, next_state, torch.tensor([reward], dtype=torch.float32))
+
+        # End the episode if the drone hits the ground
+        if altitude <= 0:
+            break
+
+    # Optimize the model after the episode ends
+    optimize_model()
+
+    return total_reward, stored_commands
+
+def main():
+    data = load_simulator_data("your_input_csv_file.csv")
+    
+    # For this example, we're using the same data for each episode. 
+    # In a more realistic scenario, each episode would have different data.
+    num_episodes = 10
+    for episode in range(num_episodes):
+        total_reward, stored_commands = run_episode(data)
+        print(f"Episode {episode + 1} Total Reward: {total_reward}")
+    
+    # Save commands from the last episode for demonstration
     save_commands_to_csv(stored_commands, "output_commands.csv")
+    save_replay_memory(memory, "replay_memory.pkl")
 
 if __name__ == "__main__":
     main()
