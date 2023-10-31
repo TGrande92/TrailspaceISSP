@@ -86,7 +86,7 @@ def select_action(state):
         return torch.tensor([[random.randrange(n_actions)]], dtype=torch.long)
 
 def get_reward(altitude, xaccel, yaccel, zaccel):
-    if altitude > 0:
+    if altitude > 151:
         return 1
     else:
         return -100
@@ -139,9 +139,13 @@ def run_episode(data):
 
     for idx, row in enumerate(data):
         elapsedTime, altitude, xaccel, yaccel, zaccel = row
-        state = torch.tensor([float(altitude), float(xaccel), float(yaccel), float(zaccel)], dtype=torch.float32).unsqueeze(0)
+        altitude = float(altitude)
+        xaccel = float(xaccel)
+        yaccel = float(yaccel)
+        zaccel = float(zaccel)
+        state = torch.tensor([altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
         action = select_action(state)
-        reward = get_reward(float(altitude), float(xaccel), float(yaccel), float(zaccel))
+        reward = get_reward(altitude, xaccel, yaccel, zaccel)
         total_reward += reward
         elevator, aileron, rudder = action_space[int(action.item())]
         stored_commands.append([elapsedTime, elevator, aileron, rudder])
@@ -163,7 +167,7 @@ def run_episode(data):
     return total_reward, stored_commands
 
 def main():
-    data = load_simulator_data("your_input_csv_file.csv")
+    data = load_simulator_data("dummydata/data18.csv")
     
     # For this example, we're using the same data for each episode. 
     # In a more realistic scenario, each episode would have different data.
