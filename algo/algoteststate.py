@@ -178,12 +178,10 @@ def run_episode(data):
     return total_reward, stored_commands
 
 def main():
-    data = load_simulator_data("dummydata/data18.csv")
-    
-    # For this example, we're using the same data for each episode. 
-    # In a more realistic scenario, each episode would have different data.
     num_episodes = 10
     for episode in range(num_episodes):
+        dummy = random.randint(1, 24)
+        data = load_simulator_data(f"dummydata/data{dummy}.csv")
         total_reward, stored_commands = run_episode(data)
         print(f"Episode {episode + 1} Total Reward: {total_reward}")
     
