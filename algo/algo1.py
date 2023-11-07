@@ -5,7 +5,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
-
+from fg_in_loop import elevator_input
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -192,8 +192,9 @@ def optimize_model():
         state, info = env.reset()
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         for t in count():
-        episode_reward = 0
+            episode_reward = 0
             action = select_action(state)
+            elevator_input(action)
             observation, reward, terminated, truncated, _ = env.step(action.item())
             reward = torch.tensor([reward], device=device)
             episode_reward += reward.item()
