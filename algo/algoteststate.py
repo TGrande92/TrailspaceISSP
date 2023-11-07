@@ -45,6 +45,15 @@ def load_replay_memory(file_name):
     with open(file_name, 'rb') as file:
         return pickle.load(file)
 
+# Function to save model weights
+def save_model_weights(model, filename):
+    torch.save(model.state_dict(), filename)
+
+# Function to load model weights
+def load_model_weights(model, filename):
+    model.load_state_dict(torch.load(filename))
+    model.eval()  # Set the model to evaluation mode
+
 # Global Variables
 BATCH_SIZE = 128
 GAMMA = 0.99
@@ -67,6 +76,8 @@ n_observations = 4  # altitude, xaccel, yaccel, zaccel
 
 policy_net = DQN(n_observations, n_actions)
 target_net = DQN(n_observations, n_actions)
+load_model_weights(policy_net, "policy_net_weights.pth")
+load_model_weights(target_net, "target_net_weights.pth")
 target_net.load_state_dict(policy_net.state_dict())
 optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
 memory = ReplayMemory(10000)
@@ -179,6 +190,10 @@ def main():
     # Save commands from the last episode for demonstration
     save_commands_to_csv(stored_commands, "output_commands.csv")
     save_replay_memory(memory, "replay_memory.pkl")
+
+    # Save the model weights after all episodes
+    save_model_weights(policy_net, "policy_net_weights.pth")
+    save_model_weights(target_net, "target_net_weights.pth")
 
 if __name__ == "__main__":
     main()
