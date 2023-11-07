@@ -143,49 +143,20 @@ def save_commands_to_csv(commands, file_path):
         writer.writerow(["elapsedTime", "elevator", "aileron", "rudder"])
         writer.writerows(commands)
 
-def run_episode(data):
-    """Run one episode and return the total reward."""
-    total_reward = 0
-    stored_commands = []
+def process_state(altitude, xaccel, yaccel, zaccel):
+    """Process a single state and return the selected action."""
+    state = torch.tensor([altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
+    action = select_action(state)
+    elevator, aileron, rudder = action_space[int(action.item())]
+    return (elevator, aileron, rudder)
 
-    for idx, row in enumerate(data):
-        elapsedTime, altitude, xaccel, yaccel, zaccel = row
-        altitude = float(altitude)
-        xaccel = float(xaccel)
-        yaccel = float(yaccel)
-        zaccel = float(zaccel)
-        state = torch.tensor([altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
-        action = select_action(state)
-        reward = get_reward(altitude, xaccel, yaccel, zaccel)
-        total_reward += reward
-        elevator, aileron, rudder = action_space[int(action.item())]
-        stored_commands.append([elapsedTime, elevator, aileron, rudder])
-
-        # Store this transition into the replay memory
-        if idx + 1 < len(data):
-            next_state = torch.tensor([float(data[idx+1][1]), float(data[idx+1][2]), float(data[idx+1][3]), float(data[idx+1][4])], dtype=torch.float32).unsqueeze(0)
-        else:
-            next_state = None
-        memory.push(state, action, next_state, torch.tensor([reward], dtype=torch.float32))
-
-        # End the episode if the drone hits the ground
-        if altitude <= 0:
-            break
-
-    # Optimize the model after the episode ends
+def update_memory_and_optimize(state, action, next_state, reward):
+    """Store the transition in replay memory and optimize the model."""
+    memory.push(state, action, next_state, torch.tensor([reward], dtype=torch.float32))
     optimize_model()
 
-    return total_reward, stored_commands
-
 def main():
-    data = load_simulator_data("dummydata/data18.csv")
-    
-    # For this example, we're using the same data for each episode. 
-    # In a more realistic scenario, each episode would have different data.
-    num_episodes = 10
-    for episode in range(num_episodes):
-        total_reward, stored_commands = run_episode(data)
-        print(f"Episode {episode + 1} Total Reward: {total_reward}")
+    # integrate this once we get all the simulator scripts working
     
     # Save commands from the last episode for demonstration
     save_commands_to_csv(stored_commands, "output_commands.csv")
