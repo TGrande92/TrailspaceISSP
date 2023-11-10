@@ -150,7 +150,7 @@ def load_simulator_data(file_path):
         data = [line for line in reader]
     return data
 
-def log_run_data(run_number, episode_states, episode_actions, flight_duration):
+def log_run_data(run_number, episode_states, episode_actions, flight_duration, reward):
     """Logs the data for a single run to a CSV file."""
     run_log_file = f'runlogs/run{run_number}.csv'
     with open(run_log_file, 'w', newline='') as f:
@@ -158,6 +158,7 @@ def log_run_data(run_number, episode_states, episode_actions, flight_duration):
         writer.writerow(["altitude", "xaccel", "yaccel", "zaccel", "elevator", "aileron", "rudder"])
         for state, action in zip(episode_states, episode_actions):
             writer.writerow(state + list(action))
+        writer.writerow(["Reward", "", "", "", reward])
         writer.writerow(["Flight Duration", "", "", "", flight_duration])
 
 def initialize_runlogs():
@@ -203,6 +204,7 @@ def main():
             start_time = time.time()
             episode_actions = []
             episode_states = []
+            episode_actions_log = []
             while client.altitude_ft() > 153:
                 # Get the current state
                 altitude = client.altitude_ft()
@@ -218,6 +220,8 @@ def main():
                 # Process state to get actions
                 action_index = select_action(state)
                 elevator, aileron, rudder = action_space[int(action_index.item())]
+                actions = [elevator, aileron, rudder]
+                episode_actions_log.append(actions)
                 print(elevator, aileron, rudder)
 
                 # Apply actions to the simulator
@@ -231,11 +235,12 @@ def main():
             run_end_time = time.time()
             flight_duration = run_end_time - start_time
             print(f"Flight duration for Run No {run_number}: {flight_duration} seconds")
-            log_run_data(current_run_log, episode_states, episode_actions, flight_duration)
 
             # Update memory and optimize model with the episode reward
             final_altitude = client.altitude_ft()
             reward = get_reward(final_altitude, flight_duration)
+            log_run_data(current_run_log, episode_states, episode_actions_log, flight_duration, reward)
+            print(f'Run reward: {reward}')
             for i in range(len(episode_actions)):
                 state, action_index = episode_actions[i]
                 action_tensor = torch.tensor([[action_index]], dtype=torch.long)
