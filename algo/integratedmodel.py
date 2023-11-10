@@ -11,6 +11,7 @@ from fgclient import FgClient
 import time
 import subprocess
 import os
+import glob
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
