@@ -106,14 +106,19 @@ def select_action(state):
     else:
         return torch.tensor([[random.randrange(n_actions)]], dtype=torch.long)
 
-def get_reward(altitude, flight_duration):
+def get_state_reward(state):
+    # Assuming state contains [altitude, xaccel, yaccel, zaccel]
+    altitude = state[0]
     if altitude > 153:
-        # Positive reward for staying above the crash threshold
-        # Increase the reward linearly with flight duration
-        return 1 + flight_duration * 0.1
+        # Positive reward for maintaining altitude
+        return 1
     else:
-        # Large negative reward for crashing
-        return -100
+        # Negative reward for dropping altitude
+        return -10
+
+def get_episodic_reward(flight_duration):
+    # Reward based on flight duration
+    return flight_duration * 0.1  # Adjust multiplier as needed
 
 # Optimize Model Function
 def optimize_model():
@@ -215,7 +220,7 @@ def main():
                 episode_states.append(states)
                 print(altitude, xaccel, yaccel, zaccel)
 
-                state = torch.tensor([altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
+                state = torch.tensor(states, dtype=torch.float32).unsqueeze(0)
 
                 # Process state to get actions
                 action_index = select_action(state)
@@ -232,25 +237,23 @@ def main():
                 # Store the state and action
                 episode_actions.append((state, action_index))
 
+                # Calculate and update memory with state reward
+                state_reward = get_state_reward(altitude, xaccel, yaccel, zaccel)
+                action_tensor = torch.tensor([[action_index]], dtype=torch.long)
+                update_memory(state, action_tensor, None, state_reward)
+
             run_end_time = time.time()
             flight_duration = run_end_time - start_time
             print(f"Flight duration for Run No {run_number}: {flight_duration} seconds")
 
-            # Update memory and optimize model with the episode reward
-            final_altitude = client.altitude_ft()
-            reward = get_reward(final_altitude, flight_duration)
-            log_run_data(current_run_log, episode_states, episode_actions_log, flight_duration, reward)
-            print(f'Run reward: {reward}')
-            for i in range(len(episode_actions)):
-                state, action_index = episode_actions[i]
-                action_tensor = torch.tensor([[action_index]], dtype=torch.long)
-                
-                if i < len(episode_actions) - 1:
-                    next_state = episode_actions[i + 1][0]  # Next state is the state of the next action
-                else:
-                    next_state = None  # No next state for the last action
+            # Calculate episodic reward and update memory
+            episodic_reward = get_episodic_reward(flight_duration)
+            for state, action in episode_actions:
+                update_memory(state, action, None, episodic_reward)
 
-                update_memory(state, action_tensor, next_state, reward)
+            # Log run data
+            log_run_data(current_run_log, episode_states, episode_actions_log, flight_duration, episodic_reward)
+            print(f'Run reward: {episodic_reward}')
 
             run_number += 1
             current_run_log += 1
