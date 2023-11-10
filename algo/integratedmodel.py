@@ -10,6 +10,7 @@ from collections import namedtuple, deque
 from fgclient import FgClient
 import time
 import subprocess
+import os
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -54,8 +55,11 @@ def save_model_weights(model, filename):
 
 # Function to load model weights
 def load_model_weights(model, filename):
-    model.load_state_dict(torch.load(filename))
-    model.eval()  # Set the model to evaluation mode
+    if os.path.exists(filename):
+        model.load_state_dict(torch.load(filename))
+        model.train()  # Set the model to training mode
+    else:
+        print(f"No weights found at {filename}, initializing model with default weights.")
 
 # Global Variables
 BATCH_SIZE = 128
