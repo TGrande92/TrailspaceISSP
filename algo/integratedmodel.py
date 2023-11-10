@@ -7,6 +7,9 @@ import random
 import math
 import pickle
 from collections import namedtuple, deque
+from fgclient import FgClient
+import time
+import subprocess
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -96,10 +99,13 @@ def select_action(state):
     else:
         return torch.tensor([[random.randrange(n_actions)]], dtype=torch.long)
 
-def get_reward(altitude, xaccel, yaccel, zaccel):
-    if altitude > 151:
-        return 1
+def get_reward(altitude, flight_duration):
+    if altitude > 150:
+        # Positive reward for staying above the crash threshold
+        # Increase the reward linearly with flight duration
+        return 1 + flight_duration * 0.1
     else:
+        # Large negative reward for crashing
         return -100
 
 # Optimize Model Function
@@ -155,16 +161,71 @@ def update_memory_and_optimize(state, action, next_state, reward):
     memory.push(state, action, next_state, torch.tensor([reward], dtype=torch.float32))
     optimize_model()
 
-def main():
-    # integrate this once we get all the simulator scripts working
-    
-    # Save commands from the last episode for demonstration
-    save_commands_to_csv(stored_commands, "output_commands.csv")
-    save_replay_memory(memory, "replay_memory.pkl")
+def run_fgfs(filename):
+    with open(filename, 'r') as file:
+        fg_command = file.read().strip()  # Read and strip any trailing whitespace
+    return subprocess.Popen(fg_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-    # Save the model weights after all episodes
+def kill_fgfs():
+    subprocess.run(["bash", "kill.sh"])
+
+def main():
+    run_number = 0
+    while run_number < 10:
+        try:
+            print(f"Starting Flightgear for Run No {run_number}!")
+            run_fgfs('run_fg_in.sh')
+            time.sleep(10)
+            client = FgClient()
+
+            start_time = time.time()
+            episode_actions = []
+            while client.altitude_ft() > 150:
+                # Get the current state
+                altitude = client.altitude_ft()
+                xaccel = client.get_xaccel()
+                yaccel = client.get_yaccel()
+                zaccel = client.get_zaccel()
+                print(altitude, xaccel, yaccel, zaccel)
+                state = torch.tensor([altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
+
+                # Process state to get actions
+                action_index = select_action(state)
+                elevator, aileron, rudder = action_space[int(action_index.item())]
+                print(elevator, aileron, rudder)
+
+                # Apply actions to the simulator
+                client.set_elevator(elevator)
+                client.set_aileron(aileron)
+                client.set_rudder(rudder)
+
+                # Store the actions for this episode
+                episode_actions.append((elevator, aileron, rudder))
+
+            run_end_time = time.time()
+            flight_duration = run_end_time - start_time
+            print(f"Flight duration for Run No {run_number}: {flight_duration} seconds")
+
+            # Update memory and optimize model with the episode reward
+            final_altitude = client.altitude_ft()
+            reward = get_reward(final_altitude, flight_duration)
+            next_state = torch.tensor([final_altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
+            for action in episode_actions:
+                action_index = action_space.index(action)
+                action_tensor = torch.tensor([[action_index]], dtype=torch.long)
+                update_memory_and_optimize(state, action_tensor, next_state, reward)
+
+            run_number += 1
+            if run_number % 5 == 0:
+                optimize_model()
+
+        finally:
+            kill_fgfs()
+
+    # Save model and memory at the end
     save_model_weights(policy_net, "policy_net_weights.pth")
     save_model_weights(target_net, "target_net_weights.pth")
+    save_replay_memory(memory, "replay_memory.pkl")
 
 if __name__ == "__main__":
     main()

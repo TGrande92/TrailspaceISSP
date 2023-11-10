@@ -74,8 +74,10 @@ class FgClient:
 
   def get_zaccel(self):
     return(self.get_prop_float("/accelerations/pilot/z-accel-fps_sec"))
+
   def elapsed_time(self):
     return(self.get_prop_float('/sim/time/elapsed-sec'))
+    
   def get_windspeed(self):
     return(self.get_prop_float('/environment/wind-speed-kt'))
 
@@ -90,9 +92,6 @@ class FgClient:
     
   def get_rudder(self):
     return(self.get_prop_float('/controls/flight/rudder'))
-  
-  # def get_elapsed_time(self):
-  #   return(self.get_prop_float('/sim/time/elapsed-sec'))
   
   def set_elevator(self,val):
     self.set_prop('/controls/flight/elevator',val)
