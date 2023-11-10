@@ -104,7 +104,7 @@ def select_action(state):
         return torch.tensor([[random.randrange(n_actions)]], dtype=torch.long)
 
 def get_reward(altitude, flight_duration):
-    if altitude > 150:
+    if altitude > 153:
         # Positive reward for staying above the crash threshold
         # Increase the reward linearly with flight duration
         return 1 + flight_duration * 0.1
@@ -184,7 +184,7 @@ def main():
 
             start_time = time.time()
             episode_actions = []
-            while client.altitude_ft() > 150:
+            while client.altitude_ft() > 153:
                 # Get the current state
                 altitude = client.altitude_ft()
                 xaccel = client.get_xaccel()
