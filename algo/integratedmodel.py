@@ -60,6 +60,8 @@ def load_model_weights(model, filename):
         model.train()  # Set the model to training mode
     else:
         print(f"No weights found at {filename}, initializing model with default weights.")
+        torch.save(model.state_dict(), filename)
+        model.train()
 
 # Global Variables
 BATCH_SIZE = 128
@@ -175,7 +177,7 @@ def kill_fgfs():
 
 def main():
     run_number = 0
-    while run_number < 10:
+    while run_number < 11:
         try:
             print(f"Starting Flightgear for Run No {run_number}!")
             run_fgfs('run_fg_in.sh')
