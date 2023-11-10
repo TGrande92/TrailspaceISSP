@@ -149,11 +149,24 @@ def load_simulator_data(file_path):
         data = [line for line in reader]
     return data
 
-def save_commands_to_csv(commands, file_path):
-    with open(file_path, 'w', newline='') as f:
+def log_run_data(run_number, episode_states, episode_actions, flight_duration):
+    """Logs the data for a single run to a CSV file."""
+    run_log_file = f'runlogs/run{run_number}.csv'
+    with open(run_log_file, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(["elapsedTime", "elevator", "aileron", "rudder"])
-        writer.writerows(commands)
+        writer.writerow(["altitude", "xaccel", "yaccel", "zaccel", "elevator", "aileron", "rudder"])
+        for state, action in zip(episode_states, episode_actions):
+            writer.writerow(state + list(action))
+        writer.writerow(["Flight Duration", "", "", "", flight_duration])
+
+def initialize_runlogs():
+    """Initializes the runlogs directory and finds the last run number."""
+    if not os.path.exists('runlogs'):
+        os.makedirs('runlogs')
+    
+    run_files = glob.glob('runlogs/run*.csv')
+    run_numbers = [int(os.path.splitext(os.path.basename(f))[0][3:]) for f in run_files]
+    return max(run_numbers) if run_numbers else 0
 
 def process_state(altitude, xaccel, yaccel, zaccel):
     """Process a single state and return the selected action."""
@@ -162,10 +175,10 @@ def process_state(altitude, xaccel, yaccel, zaccel):
     elevator, aileron, rudder = action_space[int(action.item())]
     return (elevator, aileron, rudder)
 
-def update_memory_and_optimize(state, action, next_state, reward):
-    """Store the transition in replay memory and optimize the model."""
+def update_memory(state, action, next_state, reward):
+    """Store the transition in replay memory"""
     memory.push(state, action, next_state, torch.tensor([reward], dtype=torch.float32))
-    optimize_model()
+    
 
 def run_fgfs(filename):
     with open(filename, 'r') as file:
@@ -176,6 +189,8 @@ def kill_fgfs():
     subprocess.run(["bash", "kill.sh"])
 
 def main():
+    last_run_number = initialize_runlogs()
+    current_run_log = last_run_number + 1
     run_number = 0
     while run_number < 11:
         try:
@@ -186,13 +201,17 @@ def main():
 
             start_time = time.time()
             episode_actions = []
+            episode_states = []
             while client.altitude_ft() > 153:
                 # Get the current state
                 altitude = client.altitude_ft()
                 xaccel = client.get_xaccel()
                 yaccel = client.get_yaccel()
                 zaccel = client.get_zaccel()
+                states = [altitude, xaccel, yaccel, zaccel]
+                episode_states.append(states)
                 print(altitude, xaccel, yaccel, zaccel)
+
                 state = torch.tensor([altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
 
                 # Process state to get actions
@@ -205,23 +224,30 @@ def main():
                 client.set_aileron(aileron)
                 client.set_rudder(rudder)
 
-                # Store the actions for this episode
-                episode_actions.append((elevator, aileron, rudder))
+                # Store the state and action
+                episode_actions.append((state, action_index))
 
             run_end_time = time.time()
             flight_duration = run_end_time - start_time
             print(f"Flight duration for Run No {run_number}: {flight_duration} seconds")
+            log_run_data(current_run_log, episode_states, episode_actions, flight_duration)
 
             # Update memory and optimize model with the episode reward
             final_altitude = client.altitude_ft()
             reward = get_reward(final_altitude, flight_duration)
-            next_state = torch.tensor([final_altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
-            for action in episode_actions:
-                action_index = action_space.index(action)
+            for i in range(len(episode_actions)):
+                state, action_index = episode_actions[i]
                 action_tensor = torch.tensor([[action_index]], dtype=torch.long)
-                update_memory_and_optimize(state, action_tensor, next_state, reward)
+                
+                if i < len(episode_actions) - 1:
+                    next_state = episode_actions[i + 1][0]  # Next state is the state of the next action
+                else:
+                    next_state = None  # No next state for the last action
+
+                update_memory(state, action_tensor, next_state, reward)
 
             run_number += 1
+            current_run_log += 1
             if run_number % 5 == 0:
                 optimize_model()
 
