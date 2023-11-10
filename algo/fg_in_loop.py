@@ -3,6 +3,7 @@ from fgclient import FgClient
 import subprocess
 import time
 import csv, os
+import asyncio
 
 def run_fgfs(filename):
     with open(filename, 'r') as file:
@@ -23,61 +24,81 @@ def get_run_number():
 
     return run_number
 
-#Individual input setting
-
-def throttle_input(throttle):
-    #Set up the client then set the throttle
-    client = FgClient()
-    client.set_throttle(throttle)
-
-def aileron_input(aileron):
-    #Set up the client then set the aileron
-    client = FgClient()
-    client.set_aileron(aileron)
-
-def elevator_input(elevator):
-    #Set up the client then set the elevator
-    client = FgClient()
-    client.set_elevator(elevator)
-
-def rudder_input(rudder):
-    #Set up the client then set the rudder
-    client = FgClient()
-    client.set_rudder(rudder)
+def data_bg(client):
+    data_log = []
+    data_log.append({
+        client.get_xaccel(),
+        client.get_yaccel(),
+        client.get_zaccel()
+    })
+    print(data_log)
+    return data_log
 
 def main():
     run_number = get_run_number()
+    data = []
     while True:
         try:
             print(f"Starting Flightgear for Run No {run_number}!")
             run_fgfs('run_fg_in.sh')
             time.sleep(10)
-            run_start_time = time.time()  # Record the start time for the current run
             print("You can now control the plane!")
             client = FgClient()
-
+            print("Current Wind Speed in knots: ", client.get_windspeed())
+            # client.set_windspeed(input("Enter wind speed in knots: "))
+            
+            # print("Updated Wind Speed:", client.get_windspeed())
+            print("Current Wind Direction in Deg: ", client.get_wind_direction())
+            # client.set_wind_direction(input("Enter wind direction in degrees: "))
+            # client.set_wind_direction(220) #Setting the default wind direction to 220 degrees
+            # print("Updated Wind Direction in Deg: ", client.get_wind_direction())            
             # Define the property name and the new value you want to set
             while client.altitude_ft() > 180:
-                throttle = input("Enter Throttle Value between -1.0 and 1.0: ")
-                client.set_throttle(throttle)
+                client.set_wind_direction(100.00) #Setting the default wind direction to 220 degrees
+                client.set_windspeed(8.0)
+
+                # throttle = input("Enter Throttle Value between -1.0 and 1.0: ")
+                client.set_throttle(0)
                 if client.altitude_ft() < 180:
                     break
-                aileron = input("Enter Aileron Value between -1.0 and 1.0: ")
-                client.set_aileron(aileron)
+                # aileron = input("Enter Aileron Value between -1.0 and 1.0: ")
+                client.set_aileron(0)
                 if client.altitude_ft() < 180:
                     break
-                elevator = input("Enter Elevator Value between -1.0 and 1.0: ")
-                client.set_elevator(elevator)
+                # elevator = input("Enter Elevator Value between -1.0 and 1.0: ")
+                client.set_elevator(0)
                 if client.altitude_ft() < 180:
                     break
-                rudder = input("Enter Rudder Value between -1.0 and 1.0: ")
-                client.set_rudder(rudder)
+
+                # rudder = input("Enter Rudder Value between -1.0 and 1.0: ")
+                client.set_rudder(0)
+                start_time = time.time()  # Get the current time in seconds
+                while True:
+                         #Setting default wind speed to 20 knots
+                    
+                    print(  
+                            client.get_wind_direction(),
+                            client.get_windspeed(),
+                            client.get_aileron(),
+                            client.get_elevator(),
+                            client.get_rudder(),
+                            client.get_xaccel(),
+                            client.get_yaccel(),
+                            client.get_zaccel()
+                            )
+                    current_time = time.time()  # Get the current time in seconds
+                    elapsed_time = current_time - start_time
+
+                    if elapsed_time >= 5:
+                        break
+                # client.set_windspeed(input("Enter wind speed in knots: "))
             # Set the property value
 
         finally:
-            run_end_time = time.time()  # Record the end time for the current run
+            # print(data)
+            print(client.elapsed_time())
+            duration = client.elapsed_time()
             kill_fgfs()
-            duration = run_end_time - run_start_time  # Calculate the flight duration
             print(f"Flight duration for Run No {run_number}: {duration} seconds")
 
             # Log the duration to a CSV file
