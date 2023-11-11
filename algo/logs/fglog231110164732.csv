@@ -1,0 +1,16 @@
+1699663653.0314064,/position/altitude-ft,1812.395324,G
+1699663654.1018574,/position/altitude-ft,1761.547591,G
+1699663655.0805488,/accelerations/pilot/x-accel-fps_sec,-8.527434143,G
+1699663655.400838,/accelerations/pilot/y-accel-fps_sec,1.533850607,G
+1699663655.7910254,/accelerations/pilot/z-accel-fps_sec,52.54472681,G
+1699663655.791546,/controls/flight/elevator,-1.0,S
+1699663655.7916555,/controls/flight/aileron,-1.0,S
+1699663655.7916968,/controls/flight/rudder,0.2,S
+1699663656.1787837,/position/altitude-ft,1722.996838,G
+1699663656.6437418,/position/altitude-ft,1729.538908,G
+1699663656.9999037,/accelerations/pilot/x-accel-fps_sec,-1.748739769,G
+1699663657.3818343,/accelerations/pilot/y-accel-fps_sec,6.446661681,G
+1699663657.793548,/accelerations/pilot/z-accel-fps_sec,-89.48721146,G
+1699663657.7939923,/controls/flight/elevator,0.1,S
+1699663657.7941275,/controls/flight/aileron,0.3,S
+1699663657.7941809,/controls/flight/rudder,-0.3,S

@@ -1,0 +1,8 @@
+1699662353.6125364,/position/altitude-ft,1823.168899,G
+1699662354.0150754,/position/altitude-ft,1790.398375,G
+1699662354.4093015,/accelerations/pilot/x-accel-fps_sec,-11.33500944,G
+1699662354.8201559,/accelerations/pilot/y-accel-fps_sec,2.125114625,G
+1699662355.209915,/accelerations/pilot/z-accel-fps_sec,-27.90894977,G
+1699662355.2103007,/controls/flight/elevator,0.7,S
+1699662355.2104135,/controls/flight/aileron,-0.1,S
+1699662355.210455,/controls/flight/rudder,-0.9,S

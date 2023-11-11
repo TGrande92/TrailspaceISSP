@@ -128,7 +128,7 @@ def optimize_model():
     batch = Transition(*zip(*transitions))
 
     non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), dtype=torch.bool)
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]) if any(non_final_mask) else None
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
@@ -136,8 +136,9 @@ def optimize_model():
     state_action_values = policy_net(state_batch).gather(1, action_batch)
 
     next_state_values = torch.zeros(BATCH_SIZE)
-    with torch.no_grad():
-        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+    if non_final_next_states is not None:
+        with torch.no_grad():
+            next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
 
     criterion = nn.SmoothL1Loss()
@@ -145,8 +146,10 @@ def optimize_model():
 
     optimizer.zero_grad()
     loss.backward()
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+    for param in policy_net.parameters():
+        param.grad.data.clamp_(-1, 1)
     optimizer.step()
+
 
 def load_simulator_data(file_path):
     with open(file_path, 'r') as f:
@@ -238,7 +241,7 @@ def main():
                 episode_actions.append((state, action_index))
 
                 # Calculate and update memory with state reward
-                state_reward = get_state_reward(altitude, xaccel, yaccel, zaccel)
+                state_reward = get_state_reward(states)
                 action_tensor = torch.tensor([[action_index]], dtype=torch.long)
                 update_memory(state, action_tensor, None, state_reward)
 
