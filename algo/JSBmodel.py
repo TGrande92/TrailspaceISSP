@@ -12,6 +12,7 @@ import time
 import subprocess
 import os
 import glob
+import numpy as np
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -93,33 +94,55 @@ optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
 memory = ReplayMemory(1000000)
 steps_done = 0
 
-def dynamic_eps(run_number, total_runs=10, min_eps=0.01, max_eps=1.0):
-    return max_eps - (run_number / total_runs) * (max_eps - min_eps)
+# Function to dynamically adjust epsilon
+def dynamic_eps(run_number, steps_done, total_runs=10, min_eps=0.01, max_eps=1.0):
+    return min_eps + (max_eps - min_eps) * math.exp(-1. * steps_done / EPS_DECAY)
 
-# Select Action Function
-def select_action(state, run_number):
-    global steps_done
-    eps_threshold = dynamic_eps(run_number)
-    steps_done += 1
+# Select Action Function with Dynamic Epsilon
+def select_action(state, run_number, steps_done):
+    eps_threshold = dynamic_eps(run_number, steps_done)
     if random.random() > eps_threshold:
         with torch.no_grad():
             return policy_net(state).max(1)[1].view(1, 1)
     else:
         return torch.tensor([[random.randrange(n_actions)]], dtype=torch.long)
 
-def get_state_reward(state):
-    # Assuming state contains [altitude, xaccel, yaccel, zaccel]
-    altitude = state[0]
-    if altitude > 0:
-        # Positive reward for maintaining altitude
-        return 1
+def get_state_reward(current_state, altitude_change):
+    current_altitude = current_state[0]
+
+    steep_decline_rate = -10  # Example rate in feet per 0.5 second
+
+    reward = 0
+
+    # Penalty for steep decline
+    if altitude_change > steep_decline_rate * 0.5:  # Assuming a 0.5 second interval
+        reward -= 5
+
+    # Penalty for dropping altitude to zero or below
+    if current_altitude <= 0:
+        reward -= 10
+
+    return reward
+
+def calculate_stability_reward(altitudes, threshold=5, stable_range=10):
+    """
+    Calculate stability reward based on altitude variations over the last 'threshold' seconds.
+    'stable_range' defines the acceptable range of altitude variation for stability.
+    """
+    if len(altitudes) < threshold:
+        return 0  # Not enough data to calculate stability
+
+    recent_altitudes = altitudes[-threshold:]
+    altitude_variance = np.var(recent_altitudes)
+
+    if altitude_variance <= stable_range**2:
+        return 2  # Reward for maintaining stable altitude
     else:
-        # Negative reward for dropping altitude
-        return -10
+        return 0  # No reward if altitude varies too much
 
 def get_episodic_reward(flight_duration):
     # Reward based on flight duration
-    return flight_duration * 0.1  # Adjust multiplier as needed
+    return flight_duration * 0.1
 
 # Optimize Model Function
 def optimize_model():
@@ -206,43 +229,72 @@ def main():
 
     while run_number < 11:
         jsbsim_client = JSBSim.JsbsimInterface()
+        steps_done = 0  # Reset steps_done for each run
+        altitudes = []  # List to store altitudes for stability calculation
+        stability_reward_interval = 100  # Assuming simulation step is 0.01s, calculate every second
+        stability_reward = 0
+
         try:
             print(f"Starting JSBSim for Run No {run_number}!")
-            jsbsim_client.start()  # Start JSBSim
+            jsbsim_client.start()
 
             episode_actions = []
             episode_states = []
             episode_actions_log = []
+            last_altitude = None
 
-            # Run the simulation until a certain condition is met
             while True:
-                jsbsim_client.run()  # Run one step of the simulation
+                jsbsim_client.run()
 
-                # Get the current state from JSBSim
-                state = jsbsim_client.get_state()
-                altitude, xaccel, yaccel, zaccel = state
-                episode_states.append(state)
+                current_state = jsbsim_client.get_state()
+                altitude, xaccel, yaccel, zaccel = current_state
+                episode_states.append(current_state)
 
-                if altitude <= 0:  # Condition to end the episode
+                # Calculate altitude change
+                altitude_change = 0
+                if last_altitude is not None:
+                    altitude_change = altitude - last_altitude
+                last_altitude = altitude
+
+                altitudes.append(altitude)
+
+                if len(altitudes) % stability_reward_interval == 0:
+                    stability_reward = calculate_stability_reward(altitudes, threshold=100, stable_range=10)
+
+                if jsbsim_client.gear_contact():
+                    print("Landing gear contact. Ending simulation.")
+                    next_state = None  # Set next state to None if simulation ends
+                    break
+
+                if altitude <= 0:  # Check for simulation end condition
+                    next_state = None
                     break
 
                 # Process state to get actions
-                torch_state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-                action_index = select_action(torch_state, run_number)
+                torch_current_state = torch.tensor(current_state, dtype=torch.float32).unsqueeze(0)
+                action_index = select_action(torch_current_state, run_number, steps_done)
                 elevator, aileron, rudder = action_space[int(action_index.item())]
                 actions = [elevator, aileron, rudder]
                 episode_actions_log.append(actions)
 
-                # Apply actions to the JSBSim
+                # Apply actions to JSBSim
                 jsbsim_client.set_controls(elevator, aileron, rudder)
 
+                # Get the next state
+                jsbsim_client.run()
+                next_state = jsbsim_client.get_state()
+
                 # Store the state and action
-                episode_actions.append((torch_state, action_index))
+                torch_next_state = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0) if next_state is not None else None
+                episode_actions.append((torch_current_state, action_index))
 
                 # Calculate and update memory with state reward
-                state_reward = get_state_reward(state)
+                state_reward = get_state_reward(current_state, altitude_change)
+                # Update the total reward including stability_reward
+                total_reward = state_reward + stability_reward
+                # print(total_reward) uncomment this to see the total_reward of each state
                 action_tensor = torch.tensor([[action_index]], dtype=torch.long)
-                update_memory(torch_state, action_tensor, None, state_reward)
+                update_memory(torch_current_state, action_tensor, torch_next_state, total_reward)
 
             # Use JSBSim's internal simulation time as flight duration
             flight_duration = jsbsim_client.get_sim_time()
@@ -255,7 +307,6 @@ def main():
 
             # Log run data
             log_run_data(current_run_log, episode_states, episode_actions_log, flight_duration, episodic_reward)
-            print(f'Run reward: {episodic_reward}')
 
             run_number += 1
             current_run_log += 1
@@ -263,12 +314,12 @@ def main():
                 optimize_model()
 
         finally:
-            jsbsim_client.stop()  # Stop JSBSim
+            jsbsim_client.stop()
 
-    # Save model and memory at the end
     save_model_weights(policy_net, "policy_net_weights.pth")
     save_model_weights(target_net, "target_net_weights.pth")
     save_replay_memory(memory, "replay_memory.pkl")
 
 if __name__ == "__main__":
     main()
+
