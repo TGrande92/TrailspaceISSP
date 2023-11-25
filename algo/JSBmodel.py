@@ -13,6 +13,7 @@ import subprocess
 import os
 import glob
 import numpy as np
+import statistics
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -115,7 +116,7 @@ def get_state_reward(current_state, altitude_change):
     reward = 0
 
     # Penalty for steep decline
-    if altitude_change > steep_decline_rate * 0.5:  # Assuming a 0.5 second interval
+    if altitude_change < steep_decline_rate * 0.5:  # Assuming a 0.5 second interval
         reward -= 5
 
     # Penalty for dropping altitude to zero or below
@@ -140,9 +141,29 @@ def calculate_stability_reward(altitudes, threshold=5, stable_range=10):
     else:
         return 0  # No reward if altitude varies too much
 
-def get_episodic_reward(flight_duration):
+def get_episodic_reward(flight_duration, episodes_for_average, directory):
     # Reward based on flight duration
-    return flight_duration * 0.1
+    # Episodic reward is equal to deviation from average flight time of previous series of episodes 
+
+    all_files = [os.path.join(directory, file) for file in os.listdir(directory) if os.path.isfile(os.path.join(directory, file))]
+    sorted_files = sorted(all_files, key=os.path.getmtime, reverse=True)
+
+    # Get the last n files
+    last_n_files = sorted_files[:episodes_for_average]
+
+    # Read the last line of each file
+    last_lines = []
+    for file in last_n_files:
+        with open(file, 'r') as f:
+            lines = f.readlines()
+            if lines:
+                last_line = lines[-1].strip()
+                last_line = last_line.split(",,,,")
+                last_line = last_line[-1]
+                last_line = float(last_line)
+                last_lines.append(last_line)
+
+    return flight_duration - statistics.mean(last_lines)
 
 # Optimize Model Function
 def optimize_model():
@@ -301,7 +322,7 @@ def main():
             print(f"Flight duration for Run No {run_number}: {flight_duration} seconds")
 
             # Calculate episodic reward and update memory
-            episodic_reward = get_episodic_reward(flight_duration)
+            episodic_reward = get_episodic_reward(flight_duration, 100, "runlogs")
             for state, action in episode_actions:
                 update_memory(state, action, None, episodic_reward)
 
