@@ -1,0 +1,6 @@
+torch==2.1.1  # Nightly build compatible with Python 3.11
+numpy  # Use the latest version, as it's generally compatible with recent Python versions
+jsbsim==1.2.0  # Compatible with Python 3.11
+pickle-mixin
+# random
+#   math

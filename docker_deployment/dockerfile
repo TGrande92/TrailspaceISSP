@@ -1,0 +1,39 @@
+# Use Python 3.11 slim image as the base
+FROM ubuntu:latest
+
+#update
+RUN apt-get update
+RUN apt-get upgrade -y
+
+#get python 3.11
+RUN apt-get update && apt-get install -y python3.11 python3-pip
+
+#get git
+RUN apt-get install -y git
+
+# Create a non-root user
+RUN groupadd -g 999 pythonuser && \
+    useradd -r -u 999 -g pythonuser pythonuser
+
+# Set working directory and copy only requirements.txt initially
+WORKDIR /usr/src/app
+COPY requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application
+COPY . .
+
+# Clone the aircraft model
+RUN git clone https://github.com/ThunderFly-aerospace/FlightGear-Rascal.git
+RUN cp -r FlightGear-Rascal/ /usr/local/lib/python3.10/dist-packages/jsbsim/aircraft/Rascal110-JSBSim
+
+# Change ownership to the non-root user
+RUN chown -R pythonuser:pythonuser /usr/src/app
+
+USER pythonuser
+
+WORKDIR /usr/src/app/TrailspaceISSP/algo/
+# Run your application
+CMD ["python3", "JSBmodel.py"]
