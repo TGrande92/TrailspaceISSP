@@ -66,17 +66,41 @@ class FgClient:
   def altitude_ft(self):
     return(self.get_prop_float('/position/altitude-ft'))
 
-  # def get_elevator(self):
-  #   return(self.get_prop_float('/controls/flight/elevator'))
+  def get_xaccel(self):
+    return(self.get_prop_float('/accelerations/pilot/x-accel-fps_sec'))
+
+  def get_yaccel(self):
+    return(self.get_prop_float('/accelerations/pilot/y-accel-fps_sec'))
+
+  def get_zaccel(self):
+    return(self.get_prop_float("/accelerations/pilot/z-accel-fps_sec"))
+
+  def elapsed_time(self):
+    return(self.get_prop_float('/sim/time/elapsed-sec'))
+    
+  def get_windspeed(self):
+    return(self.get_prop_float('/environment/wind-speed-kt'))
+
+  def get_wind_direction(self):
+    return (self.get_prop_float('/environment/wind-from-heading-deg'))
+
+  def get_elevator(self):
+    return(self.get_prop_float('/controls/flight/elevator'))
   
-  # def get_aileron(self):
-  #   return(self.get_prop_float('/controls/flight/aileron'))
-  
-  # def get_elapsed_time(self):
-  #   return(self.get_prop_float('/sim/time/elapsed-sec'))
+  def get_aileron(self):
+    return(self.get_prop_float('/controls/flight/aileron'))
+    
+  def get_rudder(self):
+    return(self.get_prop_float('/controls/flight/rudder'))
   
   def set_elevator(self,val):
     self.set_prop('/controls/flight/elevator',val)
+
+  def set_windspeed(self,val):
+    self.set_prop('/environment/wind-speed-kt',val)
+
+  def set_wind_direction(self,val):
+    self.set_prop('/environment/wind-from-heading-deg',val)
   
   def set_aileron(self,val):
     self.set_prop('/controls/flight/aileron',val)
@@ -86,5 +110,3 @@ class FgClient:
 
   def set_throttle(self,val):
     self.set_prop('/controls/engines/engine/throttle',val)
-
-  

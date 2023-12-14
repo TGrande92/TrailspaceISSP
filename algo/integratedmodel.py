@@ -7,6 +7,11 @@ import random
 import math
 import pickle
 from collections import namedtuple, deque
+from fgclient import FgClient
+import time
+import subprocess
+import os
+import glob
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -51,8 +56,13 @@ def save_model_weights(model, filename):
 
 # Function to load model weights
 def load_model_weights(model, filename):
-    model.load_state_dict(torch.load(filename))
-    model.eval()  # Set the model to evaluation mode
+    if os.path.exists(filename):
+        model.load_state_dict(torch.load(filename))
+        model.train()  # Set the model to training mode
+    else:
+        print(f"No weights found at {filename}, initializing model with default weights.")
+        torch.save(model.state_dict(), filename)
+        model.train()
 
 # Global Variables
 BATCH_SIZE = 128
@@ -96,11 +106,19 @@ def select_action(state):
     else:
         return torch.tensor([[random.randrange(n_actions)]], dtype=torch.long)
 
-def get_reward(altitude, xaccel, yaccel, zaccel):
-    if altitude > 151:
+def get_state_reward(state):
+    # Assuming state contains [altitude, xaccel, yaccel, zaccel]
+    altitude = state[0]
+    if altitude > 153:
+        # Positive reward for maintaining altitude
         return 1
     else:
-        return -100
+        # Negative reward for dropping altitude
+        return -10
+
+def get_episodic_reward(flight_duration):
+    # Reward based on flight duration
+    return flight_duration * 0.1  # Adjust multiplier as needed
 
 # Optimize Model Function
 def optimize_model():
@@ -110,7 +128,7 @@ def optimize_model():
     batch = Transition(*zip(*transitions))
 
     non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), dtype=torch.bool)
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]) if any(non_final_mask) else None
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
@@ -118,8 +136,9 @@ def optimize_model():
     state_action_values = policy_net(state_batch).gather(1, action_batch)
 
     next_state_values = torch.zeros(BATCH_SIZE)
-    with torch.no_grad():
-        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+    if non_final_next_states is not None:
+        with torch.no_grad():
+            next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
 
     criterion = nn.SmoothL1Loss()
@@ -127,8 +146,10 @@ def optimize_model():
 
     optimizer.zero_grad()
     loss.backward()
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+    for param in policy_net.parameters():
+        param.grad.data.clamp_(-1, 1)
     optimizer.step()
+
 
 def load_simulator_data(file_path):
     with open(file_path, 'r') as f:
@@ -137,63 +158,118 @@ def load_simulator_data(file_path):
         data = [line for line in reader]
     return data
 
-def save_commands_to_csv(commands, file_path):
-    with open(file_path, 'w', newline='') as f:
+def log_run_data(run_number, episode_states, episode_actions, flight_duration, reward):
+    """Logs the data for a single run to a CSV file."""
+    run_log_file = f'runlogs/run{run_number}.csv'
+    with open(run_log_file, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(["elapsedTime", "elevator", "aileron", "rudder"])
-        writer.writerows(commands)
+        writer.writerow(["altitude", "xaccel", "yaccel", "zaccel", "elevator", "aileron", "rudder"])
+        for state, action in zip(episode_states, episode_actions):
+            writer.writerow(state + list(action))
+        writer.writerow(["Reward", "", "", "", reward])
+        writer.writerow(["Flight Duration", "", "", "", flight_duration])
 
-def run_episode(data):
-    """Run one episode and return the total reward."""
-    total_reward = 0
-    stored_commands = []
+def initialize_runlogs():
+    """Initializes the runlogs directory and finds the last run number."""
+    if not os.path.exists('runlogs'):
+        os.makedirs('runlogs')
+    
+    run_files = glob.glob('runlogs/run*.csv')
+    run_numbers = [int(os.path.splitext(os.path.basename(f))[0][3:]) for f in run_files]
+    return max(run_numbers) if run_numbers else 0
 
-    for idx, row in enumerate(data):
-        elapsedTime, altitude, xaccel, yaccel, zaccel = row
-        altitude = float(altitude)
-        xaccel = float(xaccel)
-        yaccel = float(yaccel)
-        zaccel = float(zaccel)
-        state = torch.tensor([altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
-        action = select_action(state)
-        reward = get_reward(altitude, xaccel, yaccel, zaccel)
-        total_reward += reward
-        elevator, aileron, rudder = action_space[int(action.item())]
-        stored_commands.append([elapsedTime, elevator, aileron, rudder])
+def process_state(altitude, xaccel, yaccel, zaccel):
+    """Process a single state and return the selected action."""
+    state = torch.tensor([altitude, xaccel, yaccel, zaccel], dtype=torch.float32).unsqueeze(0)
+    action = select_action(state)
+    elevator, aileron, rudder = action_space[int(action.item())]
+    return (elevator, aileron, rudder)
 
-        # Store this transition into the replay memory
-        if idx + 1 < len(data):
-            next_state = torch.tensor([float(data[idx+1][1]), float(data[idx+1][2]), float(data[idx+1][3]), float(data[idx+1][4])], dtype=torch.float32).unsqueeze(0)
-        else:
-            next_state = None
-        memory.push(state, action, next_state, torch.tensor([reward], dtype=torch.float32))
+def update_memory(state, action, next_state, reward):
+    """Store the transition in replay memory"""
+    memory.push(state, action, next_state, torch.tensor([reward], dtype=torch.float32))
+    
 
-        # End the episode if the drone hits the ground
-        if altitude <= 0:
-            break
+def run_fgfs(filename):
+    with open(filename, 'r') as file:
+        fg_command = file.read().strip()  # Read and strip any trailing whitespace
+    return subprocess.Popen(fg_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-    # Optimize the model after the episode ends
-    optimize_model()
-
-    return total_reward, stored_commands
+def kill_fgfs():
+    subprocess.run(["bash", "kill.sh"])
 
 def main():
-    data = load_simulator_data("dummydata/data18.csv")
-    
-    # For this example, we're using the same data for each episode. 
-    # In a more realistic scenario, each episode would have different data.
-    num_episodes = 10
-    for episode in range(num_episodes):
-        total_reward, stored_commands = run_episode(data)
-        print(f"Episode {episode + 1} Total Reward: {total_reward}")
-    
-    # Save commands from the last episode for demonstration
-    save_commands_to_csv(stored_commands, "output_commands.csv")
-    save_replay_memory(memory, "replay_memory.pkl")
+    last_run_number = initialize_runlogs()
+    current_run_log = last_run_number + 1
+    run_number = 0
+    while run_number < 11:
+        try:
+            print(f"Starting Flightgear for Run No {run_number}!")
+            run_fgfs('run_fg_in.sh')
+            time.sleep(10)
+            client = FgClient()
 
-    # Save the model weights after all episodes
+            start_time = time.time()
+            episode_actions = []
+            episode_states = []
+            episode_actions_log = []
+            while client.altitude_ft() > 153:
+                # Get the current state
+                altitude = client.altitude_ft()
+                xaccel = client.get_xaccel()
+                yaccel = client.get_yaccel()
+                zaccel = client.get_zaccel()
+                states = [altitude, xaccel, yaccel, zaccel]
+                episode_states.append(states)
+                print(altitude, xaccel, yaccel, zaccel)
+
+                state = torch.tensor(states, dtype=torch.float32).unsqueeze(0)
+
+                # Process state to get actions
+                action_index = select_action(state)
+                elevator, aileron, rudder = action_space[int(action_index.item())]
+                actions = [elevator, aileron, rudder]
+                episode_actions_log.append(actions)
+                print(elevator, aileron, rudder)
+
+                # Apply actions to the simulator
+                client.set_elevator(elevator)
+                client.set_aileron(aileron)
+                client.set_rudder(rudder)
+
+                # Store the state and action
+                episode_actions.append((state, action_index))
+
+                # Calculate and update memory with state reward
+                state_reward = get_state_reward(states)
+                action_tensor = torch.tensor([[action_index]], dtype=torch.long)
+                update_memory(state, action_tensor, None, state_reward)
+
+            run_end_time = time.time()
+            flight_duration = run_end_time - start_time
+            print(f"Flight duration for Run No {run_number}: {flight_duration} seconds")
+
+            # Calculate episodic reward and update memory
+            episodic_reward = get_episodic_reward(flight_duration)
+            for state, action in episode_actions:
+                update_memory(state, action, None, episodic_reward)
+
+            # Log run data
+            log_run_data(current_run_log, episode_states, episode_actions_log, flight_duration, episodic_reward)
+            print(f'Run reward: {episodic_reward}')
+
+            run_number += 1
+            current_run_log += 1
+            if run_number % 5 == 0:
+                optimize_model()
+
+        finally:
+            kill_fgfs()
+
+    # Save model and memory at the end
     save_model_weights(policy_net, "policy_net_weights.pth")
     save_model_weights(target_net, "target_net_weights.pth")
+    save_replay_memory(memory, "replay_memory.pkl")
 
 if __name__ == "__main__":
     main()
