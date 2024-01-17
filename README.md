@@ -63,7 +63,7 @@ Follow these steps to set up JSBSim successfully. Ensure each step is executed c
     -   As of January 17th, 2024, Tyler Grande updated the link:
       
         
-        `git clone -b JSB-Model https://github.com/TGrande92/TrailspaceISSP.git` 
+        `git clone https://github.com/TGrande92/TrailspaceISSP.git` 
         
 7.  **Run the Model**
     
