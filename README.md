@@ -40,8 +40,8 @@ Follow these steps to set up JSBSim successfully. Ensure each step is executed c
     -   Execute commands:
         
         
-        `pip install torch
-        pip install jsbsim` 
+        `pip install torch`
+        `pip install jsbsim` 
         
 4.  **Install JSBSim**
     
