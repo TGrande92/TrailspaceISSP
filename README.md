@@ -71,7 +71,7 @@ Follow these steps to set up JSBSim successfully. Ensure each step is executed c
 
 ## Reinforcement Learning Model Documentation (JSBmodel.py)
 
-This section explains the RL algorithm implementation for flight control using the DQN approach with JSBSim. Please refer to the word document for a further indepth explanation of the models and functions.
+This section explains the RL algorithm implementation for flight control using the DQN approach with JSBSim. Please refer to the other documentation for a more indepth explanation of the models and functions.
 
 ### Key Concepts
 
